@@ -114,6 +114,84 @@ resource "aws_security_group" "mysqlsecurity" {
     Name = "mysql_sg"
   }
 }
+resource "aws_security_group" "mybastionsecurity" {
+  name        = "my_bastion_security"
+  description = "Allow ssh for bastion host"
+  vpc_id      = "${aws_vpc.ownvpc.id}"
+
+
+  ingress {
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks =  ["0.0.0.0/0"]
+  }
+  
+  tags = {
+    Name = "mybastion_sg"
+  }
+} 
+resource "aws_security_group" "mysqlserversecurity" {
+  name        = "my_sql_server_security"
+  description = "Allow mysql ssh for bastion host only"
+  vpc_id      = "${aws_vpc.ownvpc.id}"
+
+  ingress {
+    description = "ssh"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    security_groups = ["${aws_security_group.mybastionsecurity.id}"]
+  }
+  
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks =  ["0.0.0.0/0"]
+  }
+  
+  tags = {
+    Name = "mysql_sg"
+  }
+}
+resource "aws_eip" "nat" {
+  instance = "${aws_instance.mysql.id}"
+  vpc      = true
+}
+resource "aws_nat_gateway" "addynatgw" {
+  allocation_id = "${aws_eip.nat.id}"
+  subnet_id     = "${aws_subnet.public.id}"
+
+  tags = {
+    Name = "ADDY NAT_GW"
+  }
+}
+resource "aws_route_table" "my_route_table" {
+  vpc_id = "${aws_vpc.ownvpc.id}"
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.addynatgw.id
+  }
+
+  tags = {
+    Name = "addy_routetable_for_natgw"
+  }
+}
+
+resource "aws_route_table_association" "rta_subnet_private" {
+  subnet_id      = "${aws_subnet.private.id}"
+  route_table_id = aws_route_table.my_route_table.id
+}
 resource "aws_instance" "wordpress" {
   ami           = "ami-000cbce3e1b899ebd"
   instance_type = "t2.micro"
@@ -132,7 +210,7 @@ resource "aws_instance" "mysql" {
   ami           = "ami-0019ac6129392a0f2"
   instance_type = "t2.micro"
   subnet_id = "${aws_subnet.private.id}"
-  vpc_security_group_ids = ["${aws_security_group.mysqlsecurity.id}"]
+  vpc_security_group_ids = ["${aws_security_group.mysqlsecurity.id}","${aws_security_group.mysqlserversecurity.id}"]
   key_name = "mynewkey"
   availability_zone = "ap-south-1b"
 
@@ -140,4 +218,17 @@ resource "aws_instance" "mysql" {
     Name = "mysql"
   }
 
+}
+resource "aws_instance" "bastionhost" {
+  ami           = "ami-0732b62d310b80e97"
+  instance_type = "t2.micro"
+  associate_public_ip_address = true
+  subnet_id = "${aws_subnet.public.id}"
+  vpc_security_group_ids = ["${aws_security_group.mybastionsecurity.id}"]
+  key_name = "mynewkey"
+  availability_zone = "ap-south-1a"
+
+  tags = {
+    Name = "mybastionhost"
+  }
 }
