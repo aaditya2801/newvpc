@@ -11,14 +11,14 @@ resource "aws_vpc" "ownvpc" {
   }
 }
 resource "aws_internet_gateway" "mygw" {
-  vpc_id = "${aws_vpc.ownvpc.id}"
+  vpc_id = aws_vpc.ownvpc.id
 
   tags = {
     Name = "addy_gw"
   }
 }
 resource "aws_subnet" "public" {
-  vpc_id     = "${aws_vpc.ownvpc.id}"
+  vpc_id     = aws_vpc.ownvpc.id
   cidr_block = "192.168.1.0/24"
   availability_zone = "ap-south-1a"
 
@@ -27,7 +27,7 @@ resource "aws_subnet" "public" {
   }
 }
 resource "aws_subnet" "private" {
-    vpc_id = "${aws_vpc.ownvpc.id}"
+    vpc_id = aws_vpc.ownvpc.id
 
     cidr_block = "192.168.0.0/24"
     availability_zone = "ap-south-1b"
@@ -36,26 +36,57 @@ resource "aws_subnet" "private" {
     Name = "addy_subnet2"
   }
 }
-resource "aws_route_table" "my_table" {
-  vpc_id = "${aws_vpc.ownvpc.id}"
+resource "aws_route_table" "my_route_table1" {
+  vpc_id = aws_vpc.ownvpc.id
 
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = "${aws_internet_gateway.mygw.id}"
+    gateway_id = aws_internet_gateway.mygw.id
   }
 
   tags = {
     Name = "addy_routetable"
   }
 }
-resource "aws_route_table_association" "rta_subnet_public" {
-  subnet_id      = "${aws_subnet.public.id}"
-  route_table_id = "${aws_route_table.my_table.id}"
+resource "aws_route_table_association" "route_table_association1" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.my_route_table1.id
+}
+resource "aws_eip" "nat" {
+  vpc      = true
+  depends_on = [aws_internet_gateway.mygw,]
+  
+}
+resource "aws_nat_gateway" "addynatgw" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public.id
+  depends_on = [aws_internet_gateway.mygw,]
+ 
+ tags = {
+    Name = "ADDY NAT_GW"
+  }
+}
+resource "aws_route_table" "my_route_table2" {
+  vpc_id = aws_vpc.ownvpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.addynatgw.id
+  }
+
+  tags = {
+    Name = "addy_routetable_for_natgw"
+  }
+}
+
+resource "aws_route_table_association" "route_table_association2" {
+  subnet_id      = aws_subnet.private.id
+  route_table_id = aws_route_table.my_route_table2.id
 }
 resource "aws_security_group" "mywebsecurity" {
   name        = "my_web_security"
   description = "Allow http,ssh,icmp"
-  vpc_id      = "${aws_vpc.ownvpc.id}"
+  vpc_id      = aws_vpc.ownvpc.id
 
   ingress {
     description = "HTTP"
@@ -93,7 +124,7 @@ resource "aws_security_group" "mywebsecurity" {
 resource "aws_security_group" "mysqlsecurity" {
   name        = "my_sql_security"
   description = "Allow mysql"
-  vpc_id      = "${aws_vpc.ownvpc.id}"
+  vpc_id      = aws_vpc.ownvpc.id
 
   ingress {
     description = "MYSQL/Aurora"
@@ -117,7 +148,7 @@ resource "aws_security_group" "mysqlsecurity" {
 resource "aws_security_group" "mybastionsecurity" {
   name        = "my_bastion_security"
   description = "Allow ssh for bastion host"
-  vpc_id      = "${aws_vpc.ownvpc.id}"
+  vpc_id      = aws_vpc.ownvpc.id
 
 
   ingress {
@@ -142,7 +173,7 @@ resource "aws_security_group" "mybastionsecurity" {
 resource "aws_security_group" "mysqlserversecurity" {
   name        = "my_sql_server_security"
   description = "Allow mysql ssh for bastion host only"
-  vpc_id      = "${aws_vpc.ownvpc.id}"
+  vpc_id      = aws_vpc.ownvpc.id
 
   ingress {
     description = "ssh"
@@ -160,43 +191,15 @@ resource "aws_security_group" "mysqlserversecurity" {
   }
   
   tags = {
-    Name = "mysql_sg"
-  }
-}
-resource "aws_eip" "nat" {
-  instance = "${aws_instance.mysql.id}"
-  vpc      = true
-}
-resource "aws_nat_gateway" "addynatgw" {
-  allocation_id = "${aws_eip.nat.id}"
-  subnet_id     = "${aws_subnet.public.id}"
-
-  tags = {
-    Name = "ADDY NAT_GW"
-  }
-}
-resource "aws_route_table" "my_route_table" {
-  vpc_id = "${aws_vpc.ownvpc.id}"
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.addynatgw.id
-  }
-
-  tags = {
-    Name = "addy_routetable_for_natgw"
+    Name = "mysqlserver_sg"
   }
 }
 
-resource "aws_route_table_association" "rta_subnet_private" {
-  subnet_id      = "${aws_subnet.private.id}"
-  route_table_id = aws_route_table.my_route_table.id
-}
 resource "aws_instance" "wordpress" {
   ami           = "ami-000cbce3e1b899ebd"
   instance_type = "t2.micro"
   associate_public_ip_address = true
-  subnet_id = "${aws_subnet.public.id}"
+  subnet_id = aws_subnet.public.id
   vpc_security_group_ids = ["${aws_security_group.mywebsecurity.id}"]
   key_name = "mynewkey"
   availability_zone = "ap-south-1a"
@@ -209,7 +212,7 @@ resource "aws_instance" "wordpress" {
 resource "aws_instance" "mysql" {
   ami           = "ami-0019ac6129392a0f2"
   instance_type = "t2.micro"
-  subnet_id = "${aws_subnet.private.id}"
+  subnet_id = aws_subnet.private.id
   vpc_security_group_ids = ["${aws_security_group.mysqlsecurity.id}","${aws_security_group.mysqlserversecurity.id}"]
   key_name = "mynewkey"
   availability_zone = "ap-south-1b"
@@ -223,7 +226,7 @@ resource "aws_instance" "bastionhost" {
   ami           = "ami-0732b62d310b80e97"
   instance_type = "t2.micro"
   associate_public_ip_address = true
-  subnet_id = "${aws_subnet.public.id}"
+  subnet_id = aws_subnet.public.id
   vpc_security_group_ids = ["${aws_security_group.mybastionsecurity.id}"]
   key_name = "mynewkey"
   availability_zone = "ap-south-1a"
