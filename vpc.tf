@@ -5,6 +5,7 @@ provider "aws" {
 resource "aws_vpc" "ownvpc" {
   cidr_block       = "192.168.0.0/16"
   instance_tenancy = "default"
+  enable_dns_hostnames = true
 
   tags = {
     Name = "addy_vpc"
@@ -104,8 +105,8 @@ resource "aws_security_group" "mywebsecurity" {
   }
   ingress {
     description = "ALL ICMP - IPv4"
-    from_port   = 0    
-    to_port     = 0
+    from_port   = -1    
+    to_port     = -1
     protocol    = "ICMP"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -210,7 +211,7 @@ resource "aws_instance" "wordpress" {
 
 }
 resource "aws_instance" "mysql" {
-  ami           = "ami-0019ac6129392a0f2"
+  ami           = "ami-08706cb5f68222d09"
   instance_type = "t2.micro"
   subnet_id = aws_subnet.private.id
   vpc_security_group_ids = ["${aws_security_group.mysqlsecurity.id}","${aws_security_group.mysqlserversecurity.id}"]
@@ -223,12 +224,12 @@ resource "aws_instance" "mysql" {
 
 }
 resource "aws_instance" "bastionhost" {
-  ami           = "ami-0732b62d310b80e97"
+  ami           = "ami-052c08d70def0ac62"
   instance_type = "t2.micro"
   associate_public_ip_address = true
   subnet_id = aws_subnet.public.id
   vpc_security_group_ids = ["${aws_security_group.mybastionsecurity.id}"]
-  key_name = "newkey"
+  key_name = "mynewkey"
   availability_zone = "ap-south-1a"
 
   tags = {
